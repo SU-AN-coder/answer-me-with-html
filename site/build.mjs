@@ -146,10 +146,12 @@ function copyImages(dist) {
   for (const name of IMAGES) copyFileSync(join(ROOT, 'docs/images', name), join(dist, 'images', name));
 }
 
-// sitemap.xml lists both language pages, each naming the other as its alternate (as the hreflang links in <head> do).
+// sitemap.xml lists both language pages, each naming every alternate the head names (en, zh-CN and x-default).
 // robots.txt points at it and keeps the prerendered examples, which only appear inside the page's frames, out of search.
 function writeSearchFiles(dist) {
-  const alternates = PAGES.map((p) => `    <xhtml:link rel="alternate" hreflang="${p.htmlLang}" href="${SITE_URL}${p.path}"/>`).join('\n');
+  // x-default is the page a reader gets when their language is not one of ours; the head declares it, so the sitemap does too.
+  const alternates = [...PAGES, { htmlLang: 'x-default', path: '' }]
+    .map((p) => `    <xhtml:link rel="alternate" hreflang="${p.htmlLang}" href="${SITE_URL}${p.path}"/>`).join('\n');
   const urls = PAGES.map((p) => `  <url>\n    <loc>${SITE_URL}${p.path}</loc>\n${alternates}\n  </url>`).join('\n');
   writeFileSync(join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls}\n</urlset>\n`);
   writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nDisallow: /prerender/\n\nSitemap: ${SITE_URL}sitemap.xml\n`);

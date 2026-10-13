@@ -124,8 +124,13 @@ test('site build: both pages carry the visit counter for the site domain only', 
   }
 });
 
-test('site build: sitemap.xml lists both pages and robots.txt points at it', { skip: !existsSync(join(ROOT, 'site/dist/sitemap.xml')) }, () => {
+test('site build: sitemap.xml lists both pages, every alternate, and robots.txt points at it', { skip: !existsSync(join(ROOT, 'site/dist/sitemap.xml')) }, () => {
   const sitemap = read(join(ROOT, 'site/dist/sitemap.xml'));
-  for (const page of ['https://answer-me-with-html.com/', 'https://answer-me-with-html.com/zh/']) assert.ok(sitemap.includes(`<loc>${page}</loc>`), page);
+  const alternates = [['en', 'https://answer-me-with-html.com/'], ['zh-CN', 'https://answer-me-with-html.com/zh/'], ['x-default', 'https://answer-me-with-html.com/']];
+  for (const page of ['https://answer-me-with-html.com/', 'https://answer-me-with-html.com/zh/']) {
+    assert.ok(sitemap.includes(`<loc>${page}</loc>`), page);
+    // The head declares three alternates, so every URL in the sitemap names all three.
+    for (const [lang, href] of alternates) assert.ok(sitemap.includes(`<xhtml:link rel="alternate" hreflang="${lang}" href="${href}"/>`), `${page} ${lang}`);
+  }
   assert.match(read(join(ROOT, 'site/dist/robots.txt')), /^Sitemap: https:\/\/answer-me-with-html\.com\/sitemap\.xml$/m);
 });
