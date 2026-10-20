@@ -76,7 +76,9 @@ function parseFrontmatter(lines, base, allowed) {
     // and may hold single spaces between words.
     const m = raw.match(/^([\p{L}\p{M}\p{N}_-]+(?: [\p{L}\p{M}\p{N}_-]+)*)\s*:\s*(.*)$/u);
     if (!m) throw new ParseError(`Cannot parse frontmatter line "${lines[i]}"; expected key: value`, i + 1);
-    entries[m[1]] = { value: coerce(m[1], unquote(m[2])), line: i + 1 };
+    const written = unquote(m[2]);
+    if (m[1] === 'cols') checkGridCount('cols', written, i + 1);
+    entries[m[1]] = { value: coerce(m[1], written), line: i + 1 };
   }
 
   const meta = { ...base };
@@ -124,7 +126,7 @@ function splitSections(lines, start) {
     const heading = line.match(PANEL_HEADING);
     if (heading) {
       flushMd();
-      current = { ...parseHeading(heading[1]), heading: line.trim(), line: i + 1, blocks: [] };
+      current = { ...parseHeading(heading[1], i + 1), heading: line.trim(), line: i + 1, blocks: [] };
       panels.push(current);
       continue;
     }
@@ -205,12 +207,13 @@ function findFenceClose(lines, openIdx, marker) {
   return -1;
 }
 
-function parseHeading(text) {
+function parseHeading(text, line = 0) {
   let rest = text;
   let attrs = {};
   const attrMatch = rest.match(ATTR_BLOCK);
   if (attrMatch) {
     attrs = parseAttrs(attrMatch[1]);
+    for (const key of ['span', 'rows']) checkGridCount(key, attrs[key], line);
     rest = rest.slice(0, attrMatch.index);
   }
   const idMatch = rest.match(PANEL_ID);
@@ -297,4 +300,16 @@ function stripLineComment(line) {
 function coerce(key, value) {
   if (NUMERIC_KEYS.has(key) && /^\d+$/.test(value)) return Number(value);
   return value;
+}
+
+// A grid count is a number the page writes into its grid CSS as it is: `cols` from the frontmatter (`repeat(<cols>, …)`),
+// `span` and `rows` from a panel heading (`grid-column: span <span>`, `grid-row: span <rows>`). A fractional value makes that
+// declaration invalid, so the browser drops it and the page lays out differently from the draft with no error at all (#308),
+// which is why the parsed value is checked before any clamping: -3.5 and 9.5 are caught too. A value that is not a number
+// keeps the fallback it always had (cols: `abc` and `0` keep the default 3, a negative count clamps to 1, a large one to 12).
+function checkGridCount(key, value, line) {
+  const n = Number(value);
+  if (Number.isFinite(n) && !Number.isInteger(n)) {
+    throw new ParseError(`${key} must be a whole number, not "${value}"`, line);
+  }
 }

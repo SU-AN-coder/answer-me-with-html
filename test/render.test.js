@@ -672,3 +672,19 @@ test('render: diagram lightbox behavior — expand opens dialog, Esc, close butt
   backdrop.click();
   assert.equal(lb.hasAttribute('hidden'), true, 'lightbox closes on backdrop click');
 });
+
+test('render: a fractional grid count is refused instead of laying the page out silently (#308)', () => {
+  assert.throws(
+    () => renderDoc('---\ncols: 2.5\n---\n## A\nx'),
+    (err) => err instanceof ParseError && /cols must be a whole number, not "2\.5"/.test(err.message),
+  );
+  assert.throws(() => renderDoc('## A Title {span=2.5}\nx'), /span must be a whole number/);
+});
+
+test('render: the grid counts the page writes into CSS are whole numbers (#308)', () => {
+  const page = (line) => renderDoc(`---\n${line}\n---\n## A\nx\n\n## B\ny\n\n## C\nz`).html;
+  // The fallbacks the sheet always had: a value that is not a number keeps the default 3, a negative count clamps to 1, a large one to 12.
+  for (const [written, cols] of [['cols: 3', '3'], ['cols: abc', '3'], ['cols: 0', '3'], ['cols: -2', '1'], ['cols: 9', '9'], ['cols: 999999', '12']]) {
+    assert.match(page(written), new RegExp(`class="am-grid" style="--cols: ${cols}"`), written);
+  }
+});

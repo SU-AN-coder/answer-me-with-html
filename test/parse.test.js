@@ -258,3 +258,51 @@ test('a UTF-8 BOM before frontmatter still parses', () => {
   const doc = parseDoc('\uFEFF---\ntitle: T\n---\n## A\nx');
   assert.equal(doc.meta.title, 'T');
 });
+
+// ── grid counts: the numbers the sheet writes into CSS as they are (#308) ──
+test('frontmatter: a fractional cols is rejected where it is read (#308)', () => {
+  // `repeat(2.5, …)` is invalid CSS, so the browser drops the declaration and the sheet falls back to one column.
+  for (const written of ['2.5', '-3.5', '9.5']) {
+    assert.throws(
+      () => parseDoc(`---\ntitle: T\ncols: ${written}\n---\n## A\nx`),
+      (err) => err instanceof ParseError
+        && err.line === 3
+        && err.message === `cols must be a whole number, not "${written}"`,
+    );
+  }
+});
+
+test('frontmatter: a cols that is not a whole number keeps the value it always had (#308)', () => {
+  const cols = (written) => parseDoc(`---\ncols: ${written}\n---\n## A\nx`).meta.cols;
+  assert.equal(cols('abc'), 'abc'); // not a number: the sheet falls back to its default of 3
+  assert.equal(cols('0'), 0);
+  assert.equal(cols('-2'), '-2');
+  assert.equal(cols('9'), 9);
+  assert.equal(cols('3'), 3);
+});
+
+test('panel attributes: a fractional span or rows is rejected on the heading line (#308)', () => {
+  assert.throws(
+    () => parseDoc('---\ntitle: T\n---\n\n## A Panel {span=2.5}\nx'),
+    (err) => err instanceof ParseError && err.line === 5 && err.message === 'span must be a whole number, not "2.5"',
+  );
+  assert.throws(
+    () => parseDoc('## A Panel {rows=2.5}\nx'),
+    (err) => err instanceof ParseError && err.line === 1 && err.message === 'rows must be a whole number, not "2.5"',
+  );
+  const attrs = parseDoc('## A Panel {span=2 rows=2}\nx').panels[0].attrs;
+  assert.equal(Number(attrs.span), 2);
+  assert.equal(Number(attrs.rows), 2);
+});
+
+test('panel attributes: the other attributes of a heading are not read as grid counts (#308)', () => {
+  const attrs = parseDoc('## A Panel {meta="scale 2.5" bare}\nx').panels[0].attrs;
+  assert.equal(attrs.meta, 'scale 2.5');
+  assert.equal(attrs.bare, true);
+});
+
+test('frontmatter: only cols is a grid count; other keys stay as they are written (#308)', () => {
+  // span and rows are panel attributes; a frontmatter key of that name is ordinary meta text.
+  assert.equal(parseDoc('---\nspan: 2.5\nrows: 1.5\n---\n## A\nx').meta.span, '2.5');
+  assert.equal(parseDoc('---\nspan: 2.5\nrows: 1.5\n---\n## A\nx').meta.rows, '1.5');
+});

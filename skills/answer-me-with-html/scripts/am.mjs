@@ -2485,7 +2485,9 @@ function parseFrontmatter(lines, base, allowed) {
     if (!raw || raw.startsWith("#")) continue;
     const m = raw.match(/^([\p{L}\p{M}\p{N}_-]+(?: [\p{L}\p{M}\p{N}_-]+)*)\s*:\s*(.*)$/u);
     if (!m) throw new ParseError(`Cannot parse frontmatter line "${lines[i]}"; expected key: value`, i + 1);
-    entries[m[1]] = { value: coerce(m[1], unquote(m[2])), line: i + 1 };
+    const written = unquote(m[2]);
+    if (m[1] === "cols") checkGridCount("cols", written, i + 1);
+    entries[m[1]] = { value: coerce(m[1], written), line: i + 1 };
   }
   const meta = { ...base };
   for (const [key, { value, line }] of Object.entries(entries)) {
@@ -2529,7 +2531,7 @@ function splitSections(lines, start) {
     const heading = line.match(PANEL_HEADING);
     if (heading) {
       flushMd();
-      current = { ...parseHeading(heading[1]), heading: line.trim(), line: i + 1, blocks: [] };
+      current = { ...parseHeading(heading[1], i + 1), heading: line.trim(), line: i + 1, blocks: [] };
       panels.push(current);
       continue;
     }
@@ -2597,12 +2599,13 @@ function findFenceClose(lines, openIdx, marker) {
   }
   return -1;
 }
-function parseHeading(text2) {
+function parseHeading(text2, line = 0) {
   let rest = text2;
   let attrs = {};
   const attrMatch = rest.match(ATTR_BLOCK);
   if (attrMatch) {
     attrs = parseAttrs(attrMatch[1]);
+    for (const key of ["span", "rows"]) checkGridCount(key, attrs[key], line);
     rest = rest.slice(0, attrMatch.index);
   }
   const idMatch = rest.match(PANEL_ID);
@@ -2676,6 +2679,12 @@ function stripLineComment(line) {
 function coerce(key, value) {
   if (NUMERIC_KEYS.has(key) && /^\d+$/.test(value)) return Number(value);
   return value;
+}
+function checkGridCount(key, value, line) {
+  const n = Number(value);
+  if (Number.isFinite(n) && !Number.isInteger(n)) {
+    throw new ParseError(`${key} must be a whole number, not "${value}"`, line);
+  }
 }
 
 // node_modules/marked/lib/marked.esm.js
@@ -11891,7 +11900,7 @@ template: sheet        # sheet: blueprint board (default, multi-panel grid) | do
 theme: auto            # auto (default): paper for the doc template or text only, blueprint with diagrams | blueprint | shadcn | paper; switchable in the page
 title: Page title      # or use "# Title" as the first line of the body
 subtitle: Subtitle     # optional
-cols: 3                # number of sheet grid columns, default 3
+cols: 3                # whole number of sheet grid columns, default 3
 style: 80              # STE check strictness: off | 80 (default, warn only) | strict (no page if it fails)
 mode: auto             # auto follows the system | light | dark
 source: asd-ste100.org # any other key shows in the page header meta line
@@ -11910,7 +11919,7 @@ A -> B
 <div>any content</div>
 \`\`\`
 
-- "## " starts a panel; the ID is optional (A to Z are assigned automatically, then P27, P28 ...). A capital letter and a space before a capitalized word is read as the ID: write "## B A Miss Goes Unseen" to keep the word "A". An ID you write yourself must be unique: a panel that declares P27 takes the ID an automatic P27 would get, so write one or the other. span is a hint: the page sizes panels to fit their content, so wide tables and diagrams need no span. Write span only for a panel that must stand out.
+- "## " starts a panel; the ID is optional (A to Z are assigned automatically, then P27, P28 ...). A capital letter and a space before a capitalized word is read as the ID: write "## B A Miss Goes Unseen" to keep the word "A". An ID you write yourself must be unique: a panel that declares P27 takes the ID an automatic P27 would get, so write one or the other. span is a hint: the page sizes panels to fit their content, so wide tables and diagrams need no span. Write span only for a panel that must stand out. cols, span and rows are whole numbers.
 - An image on its own line, ![what it shows](path), becomes a captioned figure and is embedded in the page; see am help image.
 - Math in text: $x^2$ is inline; a block is a line with only $$, the TeX, and a line with only $$ (or one line: $$ E = mc^2 $$). Put a long formula in a block: a block scrolls
   inside its panel, and an inline formula may wrap after = or +. \\$ writes a dollar sign. The TeX is typeset when the page is made (Temml): no script, no network.
